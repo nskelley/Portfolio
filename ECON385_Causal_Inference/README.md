@@ -2,7 +2,7 @@
 
 This folder contains Rmarkdown documents used to generate reports replicating the results of published economic research using the publicly available data sets. 
 
-## [Regression Discontinuity](/01_Regression_Discontinuity.rmd)
+## [Regression Discontinuity](/ECON385_Causal_Inference_01_Regression_Discontinuity.rmd)
 
 Using Lee (2008).
 

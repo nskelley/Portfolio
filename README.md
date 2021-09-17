@@ -24,7 +24,7 @@ If you'd prefer to view the output HTML files as webpages, you can use one of th
 
 * [Instrumental Variables](https://www.nicholasskelley.com/rmd/causal-replications/Skelley_ECON385_Instrumental.html)
 
-## [ECON 320: Econometrics - R Lab](/ECON320_EconometricsLab)
+## [ECON 320: Econometrics - R Lab](/ECON320_Econometrics_Lab)
 *Emory University, Spring 2020*
 
 The final project in the Econemetrics coding lab was to find a data set and generate a report in Rmarkdown containing summary statistics, visualizations, regression models, and analyses of the results. I elected to use the [DW-NOMINATE data set from Voteview](https://www.voteview.com/data) for my report and examine political ideology by region and political polarization trends over time.

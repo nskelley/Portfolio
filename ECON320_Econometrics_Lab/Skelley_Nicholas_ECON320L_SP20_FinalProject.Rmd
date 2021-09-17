@@ -1,0 +1,322 @@
+---
+title: "ECON 320L Final Project: Regional Political Ideology"
+author: "Nicholas Skelley"
+date: "April 27, 2020"
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    highlight: breezedark
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+###################################
+# set working directory
+getwd()
+setwd(getwd())
+
+# install and load packages
+need <- c("latex2exp","tidyr","stargazer","kableExtra","dplyr","ggplot2",
+          "tidyverse","gridExtra","lmtest","car","dotwhisker")
+installed <- need %in% rownames(installed.packages()) 
+install.packages(need[!installed])
+sapply(X=need, FUN=require, character.only=T)
+
+# clear workspace
+rm(list=ls())
+###################################
+
+voteview <- read_csv("Voteview.csv") %>% filter(chamber != "President")
+
+theme_map <- theme_classic() + 
+  theme(axis.title = element_blank(), axis.line = element_blank(), 
+        axis.text = element_blank(), axis.ticks = element_blank(), 
+        legend.position="bottom")
+```
+
+<link rel="stylesheet" href="https://use.typekit.net/bdf8vqg.css">
+
+```{css, echo=F}
+body {
+  --red: #c41013;
+  --blue: #1067c4;
+  font-family: effra, sans-serif;
+}
+
+#header {
+  width: 100%;
+  text-align: center;
+  top: 0;
+  padding-top: 30px;
+  padding-bottom: 10px;
+}
+
+#header h1 {
+  margin-top: 0;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  font-size: 28pt;
+  font-weight: 900;
+}
+
+#header button {
+  position: absolute;
+}
+
+p:not(.sourceCode),a {
+  font-size: 14pt;
+}
+
+a {
+  color: var(--blue);
+  transition: color 0.2s;
+}
+
+a:hover {
+  text-decoration: none;
+  color: var(--red);
+}
+
+h1:not(.title) {
+    text-align: left;
+    text-transform: uppercase;
+    font-size: 36pt;
+    font-weight: 900;
+    letter-spacing: 0;
+    margin-bottom: 20px;
+}
+
+h1:not(.title)::after {
+    height: 8px;
+    width: 35px;
+    background: var(--red);
+    position: relative;
+    content: '';
+    display: block;
+    top: -5px;
+    left: 2px;
+    margin: 0;
+}
+```
+
+# Introduction
+
+The belief that certain parts of the United States subscribe to specific political ideologies is widespread. The South, for example, has a reputation for its conservatism, while the Northeast is thought to be liberal. Indeed, an examination of recent electoral maps seems to show that different parts of the country have differing political views (270toWin). With different ideologies, it would make sense that geographic differences would lead to more political variation than simply being on one side of the political spectrum instead of the other. It seems reasonable that different regions would also be varyingly committed and pure in their beliefs. I examine these possibilities in this project, and I hope to shed light on our preconceived assumptions about regional political preferences.
+
+<br>
+
+# Data
+
+For my data, I use a measurement of political ideology using the DW-NOMINATE procedure developed by Keith Poole and Howard Rosenthal in the 1980’s. The DW-NOMINATE dataset measures political ideology on two dimensions for members of Congress based on their roll-call voting records. The first dimension, the dimension I use in this project, measures a liberal-conservative economic scale from -1 to 1 in which a score of -1 indicates a member who is perfectly liberal, and a score of 1 indicates a perfectly conservative member. The dataset also includes biographical information about members of Congress, including party affiliation, votes cast, constituency, and age. I use members’ constituencies to attach their ideologies to the state and region they represent.
+
+A concern with the data is that it does not represent the exact ideologies of constituents. However, under the assumption of Anthony Downs’ median voter theorem, we can consider member ideologies the products of the district’s median voter in the general election and the primary. In this situation, the member’s ideology would have had to have satisfied the median voter in the primary election to reach the general ballot and then been more palatable to the general election’s median voter than the opponent to win the seat. Therefore, the data in this dataset is not perfectly representative of constituent preferences, but it is a reasonable indicator.
+
+```{r, message=F}
+# Data Cleaning
+northeast <- c("CT","ME","MA","NH","RI","VT","NJ","NY","PA") # the states that are in the northeast (US Census)
+midwest <- c("IL","IN","MI","OH","WI","IA","KS","MN","MO","NE","ND","SD") # states in the midwest
+south <- c("DE","FL","GA","MD","NC","SC","VA","WV","AL","KY","MS","TN","AR","LA","OK","TX") # states in the south
+west <- c("AZ","CO","ID","MT","NV","NM","UT","WY","AK","CA","HI","OR","WA") # states in the west
+
+voteview$censusreg <- NA; voteview$party_name <- NA
+
+for (i in 1:length(northeast)) { voteview$censusreg[voteview$state_abbrev==northeast[i]] <- "northeast" } # loop through all states in the vector defined above; make the values in the censusreg column for those rows "northeast"
+for (i in 1:length(midwest)) { voteview$censusreg[voteview$state_abbrev==midwest[i]] <- "midwest" }
+for (i in 1:length(south)) { voteview$censusreg[voteview$state_abbrev==south[i]] <- "south" }
+for (i in 1:length(west)) { voteview$censusreg[voteview$state_abbrev==west[i]] <- "west" }
+voteview$censusreg <- as.factor(voteview$censusreg) # make censusreg a factor variable
+voteview$chamber <- as.factor(voteview$chamber) # make chamber a factor variable
+
+voteview$purity <- abs(voteview$nominate_dim1)
+voteview$party_name[voteview$party_code==100] <- "democrat"
+voteview$party_name[voteview$party_code==200] <- "republican"
+voteview$party_name <- as.factor(voteview$party_name)
+
+modern <- voteview %>% filter(congress >= 112)
+rm(list=c("i","midwest","northeast","south","west"))
+```
+
+
+
+For my analysis of polarization and ideological purity, I use the following formulas:
+$$Polarization_i = \left| \left| \mu_{NOMINATE | NOMINATE_i > 0} \right| - \left| \mu_{NOMINATE | NOMINATE_i < 0} \right| \right|$$
+$$Purity_i = \left| NOMINATE_i \right|$$
+
+When calculating polarization, it is possible to get an `NA` value when the state does not have first-dimension DW-NOMINATE scores on both sides of zero (either all of the scores are above, or all of the scores are below). While there is still a difference in the purity and severity of the opinion, there is not any polarization in the state, as the other "pole" is not represented. Therefore, I set polarization equal to zero in those states where the formula above gives a value of `NA`.
+
+## State Ideology
+
+In this graph, I examine the mean ideological views represented in Congress for each state in a map. Darker red colors indicate more conservative members, darker blue colors indicate more liberal members, and less saturated colors indicate a more moderate state. The other map shows polarization within each state to show the difference of opinion and to get a better idea of the spread of the distribution of ideologies within each state as opposed to just the mean. More saturated states are more polarized than the less saturated states.
+
+```{r, fig.width=10, fig.height=4.5}
+recent.state.ideology <- modern %>%
+  filter(chamber=="House" & state_abbrev != "USA") %>%
+  group_by(state_abbrev, censusreg) %>%
+  dplyr::summarise(mean.dim1 = mean(nominate_dim1, na.rm=T), pol = abs(abs(mean(nominate_dim1[nominate_dim1 > 0], na.rm=T)) - abs(mean(nominate_dim1[nominate_dim1 < 0], na.rm=T))), purity = mean(abs(nominate_dim1), na.rm=T))
+
+recent.state.ideology$region <- c("alaska", "alabama", "arkansas", "arizona",   "california", "colorado", "connecticuit", "delaware", "florida", "georgia", "hawaii", "iowa", "idaho", "illinois", "indiana", "kansas", "kentucky", "louisiana", "massachusetts", "maryland", "maine", "michigan", "minnesota", "missouri", "mississippi", "montana", "north carolina", "north dakota", "nebraska", "new hampshire", "new jersey", "new mexico", "nevada", "new york", "ohio", "oklahoma", "oregon", "pennsylvania", "rhode island", "south carolina", "south dakota", "tennessee", "texas", "utah", "virginia", "vermont", "washington", "wisconsin", "west virginia", "wyoming")
+
+# to have an NA value, the state must either not have any nominate_dim1 values below 0 or any values above 0. While this does not mean that there is no difference of opinion, I would argue that the polarization is negligible
+recent.state.ideology$pol[is.na(recent.state.ideology$pol)] <- 0
+
+recent.state.ideology <- inner_join(map_data("state"), recent.state.ideology, by="region")
+
+plot.dim1.state <- ggplot() + geom_polygon(data=recent.state.ideology, aes(x=long, y=lat, group=group, fill=mean.dim1)) +
+  scale_fill_gradientn(colours=c("#073c75","#1067c4","lightgray","#c41013","#820305"), limits=c(-1,1), breaks=c(-0.8,0.8), labels=c("Liberal","Conservative")) + 
+  theme_map +
+  labs(fill="Ideology", title="Mean Ideology by State")
+
+plot.polar.state <- ggplot() + geom_polygon(data=recent.state.ideology, aes(x=long, y=lat, group=group, fill=pol)) +
+  scale_fill_gradientn(colors=c("lightgray","#e590e8","#611663"), limits=c(0,0.5)) +
+  theme_map +
+  labs(fill="Polarization", title="Within-State Polarization")
+
+grid.arrange(plot.dim1.state, plot.polar.state, ncol=2)
+```
+
+## Regional Ideology
+
+The figure below shows the four main regions outlined by the United States Census Bureau.
+
+```{r, fig.width=6, fig.height=3.5}
+recent.region.ideology <- modern %>%
+  filter(chamber=="House" & state_abbrev != "USA") %>%
+  group_by(censusreg) %>%
+  dplyr::summarise(regdim1 = mean(nominate_dim1, na.rm=T), regpol = abs(abs(mean(nominate_dim1[nominate_dim1 > 0], na.rm=T)) - abs(mean(nominate_dim1[nominate_dim1 < 0]))), regpur=mean(abs(nominate_dim1), na.rm=T))
+recent.region.ideology$regpol[is.na(recent.region.ideology$regpol)] <- 0
+
+#recent.state.ideology <- inner_join(recent.state.ideology, recent.region.ideology, by="censusreg")
+
+ggplot() + geom_polygon(data=recent.state.ideology, aes(x=long, y=lat, group=group, fill=censusreg)) + 
+  theme_map + theme(legend.position = "right") +
+  scale_fill_manual(values=c("#23c258","#1a90eb","#ebb915","#de5f1b")) + labs(fill="Census Region", title="Census Regions, United States Census Bureau")
+```
+
+```{r}
+ggplot(subset(modern,!is.na(censusreg)), aes(x=censusreg, group=censusreg, y=nominate_dim1, fill=censusreg, col=censusreg)) + geom_boxplot(alpha=0.8) + ylim(-1,1) +
+  scale_fill_manual(values=c("#1a90eb","#23c258","#ebb915","#de5f1b")) + scale_color_manual(values=c("#1a90eb","#23c258","#ebb915","#de5f1b")) +
+  theme(legend.position="none") + labs(x="Region", y="DW-NOMINATE", title="Ideology by Region")
+
+ggplot(subset(modern,!is.na(censusreg)), aes(x=censusreg, group=censusreg, y=abs(nominate_dim1), col=censusreg, fill=censusreg)) + geom_boxplot(alpha=0.8) + ylim(0,1) +
+  scale_fill_manual(values=c("#1a90eb","#23c258","#ebb915","#de5f1b")) + scale_color_manual(values=c("#1a90eb","#23c258","#ebb915","#de5f1b")) +
+  theme(legend.position="none") + labs(x="Region", y="Ideological Purity", title="Ideological Purity by Region")
+```
+
+<br>
+
+# Empirical Models
+
+In the following models, I include controls for the chamber of Congress that members sit in. Because Senate terms are longer than House terms, and because Senators represent entire states instead of smaller districts, Senators are probably more likely to vote according to their true ideological beliefs than in a way that brings "pork" to their district. This could conceivably cause members of the Senate to vote in a way that is either significantly more or significantly less ideologically pure than members of the House.
+
+## Ideology by Region
+
+Model 1: Restricted
+$$ NOMINATE_i = \beta_0 + \beta_1 \cdot Midwest_i + \beta_2 \cdot South_i + \beta_3 \cdot West_i + u_i $$
+Model 2: Unrestricted; controls for chamber and party
+$$ NOMINATE_i = \beta_0 + \beta_1 \cdot Republican_i + \beta_2 \cdot Chamber_i + \beta_3 \cdot Midwest_i + \beta_4 \cdot South_i + \beta_5 \cdot West_i + u_i $$
+
+```{r}
+modern$censusreg <- relevel(modern$censusreg, "northeast")
+model1.region.dim1 <- lm(nominate_dim1 ~ censusreg, modern)
+model2.region.dim1 <- lm(nominate_dim1 ~ censusreg + party_name + chamber, modern)
+```
+
+## Ideological Purity by Region
+
+The graph below seems to show that Republicans are more ideologically pure than Democrats. Assuming that this is the case and that some regions are more likely than others to have Republican members of Congress, it seems likely that those regions would be more ideologically pure than the others.
+
+```{r}
+ggplot(subset(modern, !is.na(party_name)), aes(x=party_name, y=abs(nominate_dim1), group=party_name, col=party_name)) + geom_jitter() +
+  scale_x_discrete(labels=c("Democrat","Republican")) +
+  scale_color_manual(labels=c("Democrat","Republican"), values=c("#1067c4","#c41013")) +
+  labs(x="Party",y="Ideological Purity") + theme(legend.position = "none")
+```
+
+Model 1: Restricted
+$$ Purity_i = \beta_0 + \beta_1 \cdot Midwest_i + \beta_2 \cdot South_i + \beta_3 \cdot West_i + u_i $$
+
+Model 2: Unrestricted; controls for chamber and party
+$$ Purity_i = \beta_0 + \beta_1 \cdot Republican_i + \beta_2 \cdot Chamber_i + \beta_3 \cdot Midwest_i + \beta_4 \cdot South_i + \beta_5 \cdot West_i + u_i $$
+
+Model 3: Interaction between region and party
+$$
+\begin{aligned}
+Purity_i = \beta_0 + \beta_1 \cdot Republican_i + \beta_2 \cdot Chamber_i + \beta_3 \cdot Midwest_i + \beta_4 \cdot South_i + \beta_5 \cdot West_i + \\ \beta_6 \cdot (Republican_i \cdot Midwest_i) + \beta_7 \cdot (Republican_i \cdot South_i) + \beta_8 \cdot (Republican_i \cdot West_i) + u_i 
+\end{aligned}
+$$
+
+```{r}
+model1.region.pur <- lm(abs(nominate_dim1)~censusreg, modern)
+model2.region.pur <- lm(abs(nominate_dim1)~censusreg + party_name + chamber, modern)
+model3.region.pur <- lm(abs(nominate_dim1)~censusreg + party_name + chamber + censusreg*party_name, modern)
+```
+
+<br>
+
+# Results
+## Ideology by Region
+
+Breusch-Pagan tests for the two models outlined in the Empirical Model section above each produce p-values less than 0.001. Therefore, we can conclude that there is heteroskedasticity in the models that must be accounted for. I compute two robust models and produce the results in the table below.
+```{r}
+bptest(model1.region.dim1) #heteroskedastic
+bptest(model2.region.dim1) #heteroskedastic
+```
+
+```{r, results='asis'}
+model1.region.dim1.robust <- coeftest(model1.region.dim1, vcov=hccm(model1.region.dim1, type="hc0"))
+model2.region.dim1.robust <- coeftest(model2.region.dim1, vcov=hccm(model2.region.dim1, type="hc0"))
+
+stargazer(list(model1.region.dim1.robust,model2.region.dim1.robust), type="html", covariate.labels = c("Republican","Senate","Midwest","South","West"), dep.var.labels=c("DW-NOMINATE"))
+```
+
+The results in the table suggest that members of Congress from the Northeast are significantly more liberal than their colleagues from other regions in the country, as each of the estimated coefficients for the other regions is positive (indicating more conservatism) and statistically significant at the 1% level. The South has a particularly noteworthy coefficient of 0.839, several times larger in magnitude than the other two coefficients. This makes sense, as we typically consider the South the stronghold of the Republican Party and the Northeast the home of the Democratic base.
+
+## Ideological Purity by Region
+
+Breusch-Pagan tests for the three models outlined in the Empirical Model section above each produce p-values less than 0.001. Therefore, we can conclude that there is heteroskedasticity in the models that must be accounted for. I compute three robust models and produce the results in the table below.
+```{r}
+bptest(model1.region.pur) # heteroskedastic
+bptest(model2.region.pur) # heteroskedastic
+bptest(model3.region.pur) # heteroskedastic
+```
+
+```{r, results='asis'}
+model1.region.pur.robust <- coeftest(model1.region.pur, vcov=hccm(model1.region.pur, type="hc0"))
+model2.region.pur.robust <- coeftest(model2.region.pur, vcov=hccm(model2.region.pur, type="hc0"))
+model3.region.pur.robust <- coeftest(model3.region.pur, vcov=hccm(model3.region.pur, type="hc0"))
+
+stargazer(list(model1.region.pur.robust,model2.region.pur.robust,model3.region.pur.robust), type="html",
+          covariate.labels = c("Republican","Senate","Midwest","South","West","Republican:Midwest","Republican:South","Republican:West"), dep.var.labels=c("Ideological Purity"))
+```
+
+<br>
+
+All of the coefficients in all three models are statistically significant. Focusing on model 3, members of Congress who are Democrats in the Midwest, South, and West are statistically less ideologically pure than Democratic members of Congress from the Northeast. However, for Republican members of Congress, the effect is opposite. These members from the Midwest, South, and West are significantly more ideologically pure than their Northeastern colleagues. Anecdotally, Republican politicians in states like Massachusetts (Charlie Baker and Bill Weld, for example) tend to be more moderate, while Republicans in the South tend to be less moderate, so these results make sense.
+
+<br>
+
+# Conclusion
+
+The results I have gotten from the DW-NOMINATE dataset suggest that there is, in fact, a regional difference in political ecosystems, particularly between the Northeast and South. I have also found that there is a difference in ideological purity, so in addition to differing in general political beliefs, the regions also differ in how extreme their beliefs are. This is something that would be interesting to compare to candidate margins of victory within regions: do elected candidates win by smaller margins in more moderate regions?
+
+In addition to the main outcomes I examined, the results from the ideological purity models provide evidence relating to an MSNBC article that suggests that the Republican Party has become more extreme in recent years. While the article uses DW-NOMINATE scores to show the general divergence of the party from a moderate ideology, the results from the second ideological purity model shows that Republican members of Congress are more ideologically pure than Democrats even after controlling for geographic region.
+
+In the future, it would be interesting to examine the different political ecosystems within smaller geographic sub-regions of the United States, either using Census Bureau borders or considering the ways geography and environment can affect political beliefs to find the sub-regions.
+
+<br>
+
+# References
+
+<a href="https://www.270towin.com/historical-presidential-elections/timeline/">270toWin: Historical Presidential Electoral Maps</a>
+
+<a href="https://voteview.com/data" target="_blank">DW-NOMINATE Data/data</a>
+
+<a href="https://www.jstor.org/stable/2111172" target="_blank">DW-NOMINATE Paper (Poole and Rosenthal, 1985)</a>
+
+<a href="http://www.msnbc.com/rachel-maddow-show/one-party-has-become-more-extreme-and-one-hasnt" target="_blank">MSNBC Article: "One party has become more extreme (and one hasn't)"</a>
+
+<a href="https://www2.census.gov/geo/pdfs/maps-data/maps/reference/us_regdiv.pdf" target="_blank">US Census Regions</a>
+
+<br>

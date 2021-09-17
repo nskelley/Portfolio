@@ -1,0 +1,184 @@
+---
+title: "Differences in Differences"
+author: "Nicholas Skelley"
+date: "4/20/2020"
+output: 
+  html_document:
+    highlight: breezedark
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+####################################################################
+## Packages
+# To install and open the R packages that you need for this code. 
+need <- c('tidyverse','reshape2','kableExtra','glue','stargazer','foreign','plyr','fabricatr','latex2exp')
+have <- need %in% rownames(installed.packages()) 
+if(any(!have)) install.packages(need[!have]) 
+invisible(lapply(need, library, character.only=T)) 
+
+# Change path to whereever you place the models
+# To set up the working directory. 
+rm(list = ls())
+setwd(getwd())
+####################################################################
+```
+
+<style type="text/css">
+body{ /* Normal  */
+    font-size: 16px;
+}
+h1.title {
+  font-size: 38px;
+}
+h1 { /* Header 1 */
+  font-size: 25px;
+}
+h2 { /* Header 2 */
+  font-size: 22px;
+}
+</style>
+
+Read the paper by Eissa & Liebman. "Labor Supply Responses to the Earned Income Tax Credit." The Earned Income Tax Credit was increased in 1993. This may increase chances single mothers (treated) return to work, but likely not affect single non-moms (control)
+
+```{r}
+data <- read.csv("data/eitc.csv")
+```
+
+**Create variables `after` for years 1994+, and `treated` if they have any `children`**
+
+```{r results='hide'}
+table(data$year, useNA="always")
+data <- data %>%
+  mutate(after=ifelse(year>=1994, 1, 0))
+
+data$after <- as.factor(data$year>=1994)
+table(data$year,data$after, useNA="always")
+
+table(data$children, useNA="always")
+data$treated <- as.factor(data$children>=1)
+
+table(data$children, data$treated, useNA="always")
+```
+
+**Get average `work` within `year` and `treated`. `plot(,type='l',ylim=c(.4,.6))` average `work` separately against `year` for treated (blue), then `points` to add untreated (red).**
+
+```{r}
+avg.work.yr.treated <- data %>%
+  group_by(year,treated) %>%
+  dplyr::summarise(avg.work=mean(work))
+
+avg.work.yr.treated.wide <- reshape2::dcast(avg.work.yr.treated, year~treated, value.var="avg.work")
+
+ggplot(avg.work.yr.treated, aes(x=year, y=avg.work, group=as.factor(treated), color=as.factor(treated))) +
+  geom_line() + ylim(0.4,0.6) + labs(x="Year",y="Average Proportion Working", legend="Hi") +
+  scale_color_manual(values=c("#fa1e4a","#04c7a0"),name="Treated", labels=c("Not Treated/No Children", "Treated/Children"))
+```
+
+**Calculate the DID estimate of the effect of the EITC expansion on `work` -- both in a 2x2 format, as well as using the simple specification shown in class**
+
+```{r}
+did.avg.work <- data %>%
+  group_by(after, treated) %>%
+  dplyr::summarise(avg.work=mean(work))
+
+did.avg.work.wide <- reshape2::dcast(did.avg.work, treated~after, value.var="avg.work")
+did.avg.work.wide$d1 <- did.avg.work.wide$`TRUE` - did.avg.work.wide$`FALSE`
+kable(did.avg.work.wide, col.names=c("Treated","Before 1994","After 1994","d1"), digits=3) %>% kable_styling(full_width = F)
+
+ate.d2 <- did.avg.work.wide$d1[did.avg.work.wide$treated=="TRUE"] - did.avg.work.wide$d1[did.avg.work.wide$treated=="FALSE"]
+paste("DID estimate from 2x2 format:",round(ate.d2,3),sep=" ")
+```
+
+$$ work_i = \beta_0 + \beta_1 \cdot treated_i + \beta_2 \cdot after_i + \beta_3 \cdot treated_i \cdot after_i + u_i$$
+
+```{r, results='asis'}
+simple.spec <- lm(work~treated+after+treated*after, data)
+stargazer(simple.spec, type="html")
+```
+
+
+## Heterogeneity Analysis
+
+```{r}
+#estimate same specification on subpopulations of the data (ex: nonwhite population, education) --> do different subpopulations have hetereogeneous reactions to treatment?
+# split sample by nonwhite vs white; low vs. high education; 3 age groups; restrict treatment group to up to 1 child (treatment is currently *any* kids) --> you should be able to do this with linear models and factor variables
+table(data$nonwhite, useNA = "always")
+summary(data$age)
+summary(data$ed)
+
+#create 3 age groups
+data$agegroup <- 3
+data$agegroup[data$age <= 29] <- 1
+data$agegroup[data$age <= 39 & data$age > 29] <- 2
+data$agegroup <- as.factor(data$agegroup)
+table(data$age, data$agegroup, useNA = "always")
+table(data$agegroup, useNA="always")
+
+#create 2 education groups
+data$highed <- as.numeric(data$ed>10)
+
+#create new treatment group (one child)
+data.onechild <- data %>% filter(children<=1)
+
+#create new treatment group (two plus children)
+data.multchildren <- data %>% filter(children==0 | children>1)
+
+# models
+model.white <- lm(work~treated+after+treated*after, subset(data, data$nonwhite==0))
+model.nonwhite <- lm(work~treated+after+treated*after, subset(data, data$nonwhite==1))
+model.age1 <- lm(work~treated+after+treated*after, subset(data, data$agegroup==1))
+model.age2 <- lm(work~treated+after+treated*after, subset(data, data$agegroup==2))
+model.age3 <- lm(work~treated+after+treated*after, subset(data, data$agegroup==3))
+model.lowed <- lm(work~treated+after+treated*after, subset(data, data$highed==0))
+model.highed <- lm(work~treated+after+treated*after, subset(data, data$highed==1))
+model.treatone <- lm(work~treated+after+treated*after, data.onechild)
+model.treatmult <- lm(work~treated+after+treated*after, data.multchildren)
+
+# PLOT the coefficients (plot with clearly labeled coefficients, ideally with CI bars)
+hetero.est <- c(coef(model.white)[4],coef(model.nonwhite)[4],coef(model.age1)[4],coef(model.age2)[4],coef(model.age3)[4],
+                coef(model.highed)[4],coef(model.lowed)[4],coef(model.treatone)[4],coef(model.treatmult)[4],
+                coef(simple.spec)[4])
+hetero.se <- c(summary(model.white)$coef[4,2],summary(model.nonwhite)$coef[4,2],summary(model.age1)$coef[4,2],
+               summary(model.age2)$coef[4,2],summary(model.age3)$coef[4,2],summary(model.highed)$coef[4,2],
+               summary(model.lowed)$coef[4,2],summary(model.treatone)$coef[4,2],summary(model.treatmult)$coef[4,2],
+               summary(simple.spec)$coef[4,2])
+labels=c("White","Nonwhite","Age Group 1", "Age Group 2", "Age Group 3", "High Education", "Low Education", "One Child", "Multiple Children", "Original")
+hetero.modellabels <- factor(labels, levels=labels)
+
+data.frame(estimate=hetero.est,se=hetero.se,labels=hetero.modellabels) %>%
+  ggplot(aes(x=labels, y=estimate)) + geom_hline(yintercept=0, color="#fa1e4a") +
+    geom_pointrange(aes(ymin=(estimate - (1.96 * se)), ymax=(estimate + (1.96 * se))), shape=22, fill="white", size=0.4) +
+    labs(x="Subpopulations", y="ATE", title="Heterogeneity Test: Estimates for Specified Subpopulations", 
+         caption="Age Group 1 = [20,29]; Age Group 2 = [30,39]; Age Group 3 = [40,54]") +
+    theme(axis.text.x = element_text(angle=45,hjust=1))
+```
+
+## Falsification Tests
+
+```{r}
+# pretend instead that the policy change happened in a different, non-terminal year.
+# redefine after variable (placebo after variable) --> set cutoff to 1992, 1993, and 1995 for each placebo
+data$placebo.1992 <- as.integer(data$year>=1992)
+data$placebo.1993 <- as.integer(data$year>=1993)
+data$placebo.1995 <- as.integer(data$year>=1995)
+
+model.1992 <- lm(work~treated+placebo.1992+treated*placebo.1992, data)
+model.1993 <- lm(work~treated+placebo.1993+treated*placebo.1993, data)
+model.1995 <- lm(work~treated+placebo.1995+treated*placebo.1995, data)
+
+# plot all four placebo coefficients and the proper terminal coefficient
+# plot with confidence interval bars
+testyears <- c(1992:1995)
+estimate <- c(coef(model.1992)[4],coef(model.1993)[4],coef(simple.spec)[4],coef(model.1995)[4])
+se <- c(summary(model.1992)$coef[4,2],summary(model.1993)$coef[4,2],summary(simple.spec)$coef[4,2],summary(model.1995)$coef[4,2])
+
+data.frame(testyears,estimate,se) %>%
+  ggplot(aes(x=testyears, y=estimate)) + geom_hline(yintercept=0, col="#fa1e4a") +
+    geom_pointrange(aes(ymin=(estimate - (1.96 * se)), ymax=(estimate + (1.96 * se))), shape=22, fill="white", size=0.4) +
+    labs(x="Cutoff Year", y="ATE Estimate", title="Treatment Effect Estimate Falsification Tests", caption="Estimates of the average treatment effect in non-terminal years, including estimates from 1992, 1993, and 1995, when\n the policy change did not occur. Error bars represent 95% confidence intervals.")
+```
+
+<br>

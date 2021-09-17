@@ -1,0 +1,130 @@
+---
+title: "Randomized Controlled Trials"
+author: "Nicholas Skelley"
+date: "4/6/2020"
+output: 
+  html_document: 
+    highlight: breezedark
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+####################################################################
+## Packages
+# To install and open the R packages that you need for this code. 
+need <- c('tidyverse','kableExtra','glue','stargazer', 'foreign', 'broom')
+have <- need %in% rownames(installed.packages()) 
+if(any(!have)) install.packages(need[!have]) 
+invisible(lapply(need, library, character.only=T)) 
+
+# Change path to whereever you place the models
+# To set up the working directory. 
+rm(list = ls())
+setwd(getwd())
+####################################################################
+```
+
+<style type="text/css">
+body{ /* Normal  */
+    font-size: 16px;
+}
+h1.title {
+  font-size: 38px;
+}
+h1 { /* Header 1 */
+  font-size: 25px;
+}
+h2 { /* Header 2 */
+  font-size: 22px;
+}
+</style>
+
+Read the paper “The Effects of Micro-entrepreneurship Programs on Labor Market Performance: Experimental Evidence from Chile” by Claudia Martínez A., Esteban Puentes, Jaime Ruiz-Tagle. The authors are interested in whether a training program in Chile increased self-employment. In particular, pay attention to the motivation fo the question and the context/experimental setup and the details of the program they are evaluating.
+
+```{r}
+dataset <- read.dta("data/RCT_Martinezetal.dta")
+
+dataset <- dataset %>%
+  filter(anho==2011)
+```
+
+**Show that covariates are balanced across treatment status. These variables include sex (`sexo2010`), age (`edad2010`),  education==primary school (`basica2010`), working at baseline (`trabaja_base`), wage working at baseline (`dependiente_base`). Generate a table (or some form of output) that contains the results of a statistical test (t-test of means across groups) for these variables.**
+
+```{r}
+dataset$male <- dataset$sexo2010=="hombre"
+
+# table of means
+dataset %>%
+  group_by(T3) %>%
+  select(T3, male, edad2010, basica2010, trabaja_base, dependiente_base) %>%
+  summarise_all(mean, na.rm=T) %>%
+  select(male, edad2010, basica2010, trabaja_base, dependiente_base) %>%
+  t() %>%
+  kable(col.names = c("Control","Treated"), digits=3) %>%
+  kable_styling(full_width = F)
+```
+
+```{r, results = "asis"}
+# table of differences in means
+stargazer(list(lm(male~T3, dataset), lm(edad2010~T3, dataset), lm(basica2010~T3, dataset), lm(trabaja_base~T3, dataset), lm(dependiente_base~T3, dataset)), type="html", omit=c("Constant"), keep.stat=c("n"), covariate.labels = c("Treated"), dep.var.labels=c("Male","Age","Primary School","Working","Wage"))
+```
+
+```{r, results = "hold"}
+# series of t-tests
+t.test(male ~ T3, dataset)
+t.test(edad2010 ~ T3, dataset)
+t.test(basica2010 ~ T3, dataset)
+t.test(trabaja_base ~ T3, dataset)
+t.test(dependiente_base ~ T3, dataset)
+```
+
+
+
+**Present a table of means of the variable for being self-employed in both periods (`indep_indep`) across the two (treament & control) groups.**
+
+```{r}
+dataset %>%
+  group_by(T3) %>%
+  summarise(mean_indep_indep=mean(indep_indep, na.rm=T)) %>%
+  select(mean_indep_indep) %>%
+  t() %>%
+  kable(digits=3, col.names=c("Control","Treated")) %>%
+  kable_styling(full_width=F)
+```
+
+**Write the regression equation that you will estimate using linear regression to get the effect of the program on employment outcomes in this RCT.**
+
+$$indep\_indep_i = \beta_0 + \beta_1 \cdot Treated_i + u_i$$
+```{r}
+model1 <- lm(indep_indep~T3, dataset)
+```
+
+
+**What is the effect of treatment on being self-employed in both periods (indep_indep)? Determine some of the covariates you could possibly control for (that are in the dataset) and add them to the regression specification.**
+
+```{r}
+summary(model1)
+# receiving treatment increases the probability of being self-employed in both periods by 13.3 percentage points
+```
+
+$$indep\_indep_i = \beta_0 + {\beta_1 \cdot Treated_i} + {\beta_2 \cdot PrimSchool_i} + {\beta_3 \cdot Skill_i} + {\beta_4 \cdot Age_i} + {\beta_5 \cdot Male_i} + {\beta_6 \cdot Working_i} + {\beta_7 \cdot Wage_i} + u_i$$
+
+```{r}
+model2 <- lm(indep_indep ~ T3 + basica2010 + skills_index + edad2010 + male + trabaja_base + dependiente_base, dataset)
+summary(model2)
+# the estimate for the effect of treatment on the probability of being self-employed in both periods decreases by about one percentage point. The standard error of beta1_hat is slightly lower in the expanded regression.
+
+dataset %>%
+  filter(T3==0 & indep_indep==1) %>%
+  nrow()
+# 96 people in the control group are self-employed in both periods
+
+# there are 172 NA values of indep_indep in the control group; this accounts for the low number of people in the control group who are self-employed in both periods
+dataset %>%
+  filter(T3==0 & is.na(indep_indep)) %>%
+  nrow()
+```
+
+<br>

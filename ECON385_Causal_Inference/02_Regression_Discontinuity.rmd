@@ -1,0 +1,208 @@
+---
+title: "Regression Discontinuity"
+author: "Nicholas Skelley"
+date: "4/13/2020"
+output: 
+  html_document: 
+    highlight: breezedark
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+####################################################################
+## Packages
+# To install and open the R packages that you need for this code. 
+need <- c('tidyverse','reshape2','kableExtra','glue','stargazer','foreign','plyr')
+have <- need %in% rownames(installed.packages()) 
+if(any(!have)) install.packages(need[!have]) 
+invisible(lapply(need, library, character.only=T)) 
+
+# Change path to whereever you place the models
+# To set up the working directory. 
+rm(list = ls())
+setwd(getwd())
+####################################################################
+```
+
+<style type="text/css">
+body{ /* Normal  */
+    font-size: 16px;
+}
+h1.title {
+  font-size: 38px;
+}
+h1 { /* Header 1 */
+  font-size: 25px;
+}
+h2 { /* Header 2 */
+  font-size: 22px;
+}
+</style>
+
+The goal of this problem is to work through the construction of an RD paper. For our example, we will
+use Lee (2008). There are two datasets: `Lee2008Candidate.dta` and `Lee2008Party.dta`.
+
+```{r results='hide'}
+party <- read.dta("data/Lee2008Party.dta") %>% filter(use==1)
+candidate <- read.dta("data/Lee2008Candidate.dta") %>% filter(use==1)
+
+# candidate$second --> finished second in the race indicator (if they won the election, didn't run, or finished below second, value is NA); (NOT about the *next* race)
+
+candidate$second[is.na(candidate$second)] <- 0
+
+# naive comparison (probably incorrect)
+mean(candidate$myoutcomenext[candidate$myoutcome==1],na.rm=T)-mean(candidate$myoutcomenext[candidate$myoutcome==0],na.rm=T)
+
+nextoutcome <- melt(merge(candidate %>%
+                      group_by(yearel, myoutcome) %>%
+                      dplyr::summarise(avg_nextres=mean(myoutcomenext, na.rm=T)) %>%
+                      dcast(yearel~myoutcome, value.var="avg_nextres"),
+                    party %>%
+                      group_by(yearel) %>%
+                      dplyr::summarise(avg_repeat=mean(repeatparty, na.rm=T))), 
+                    variable.name="lastres", value.name="nextoutcome", id.vars=c("yearel")) %>%
+                mutate(lastres=as.character(lastres)) %>%
+                mutate(lastres=ifelse(lastres=="0", "runnerup", ifelse(lastres=="1", "winner", "partywon")))
+
+```
+
+### Replicate Figure 1.
+
+```{r}
+ggplot(nextoutcome, aes(x=yearel, y=nextoutcome, group=lastres, 
+                        linetype=lastres, shape=lastres)) + 
+  geom_line() +
+  geom_point(size=2.5) +
+  scale_linetype_manual(values=c("solid","dashed","dashed"), 
+                        labels=c("Incumbent Party", "Runner-up Candidate", 
+                                 "Winning Candidate")) +
+  scale_shape_manual(values=c(15,4,0), labels=c("Incumbent Party", 
+                                                "Runner-up Candidate",
+                                                "Winning Candidate")) +
+  labs(x="Year",y="Proportion Winning Election") +
+  theme(legend.title=element_blank())
+```
+
+### Replicate Figure 2a three times, with binwidths of 0.02, 0.01, and 0.005.
+
+```{r, warning=F}
+# using candidate
+candidate %>%
+  group_by(roundedDiff=round_any(difshare, 0.02)) %>%
+  dplyr::summarise(prop_reelect=mean(myoutcomenext, na.rm=T)) %>%
+  ggplot(aes(x=roundedDiff, y=prop_reelect)) + 
+  geom_point(size=2.5) + 
+  xlim(-0.25,0.25) +
+  labs(x="Margin of Victory, Election t", 
+       y="Probability of Victory, Election t+1", 
+       title="Figure 2a, binwidth=0.02")
+
+candidate %>%
+  group_by(roundedDiff=round_any(difshare, 0.01)) %>%
+  dplyr::summarise(prop_reelect=mean(myoutcomenext, na.rm=T)) %>%
+  ggplot(aes(x=roundedDiff, y=prop_reelect)) + 
+  geom_point(size=2.5) + 
+  xlim(-0.25,0.25) +
+  labs(x="Margin of Victory, Election t", 
+       y="Probability of Victory, Election t+1", 
+       title="Figure 2a, binwidth=0.01")
+
+candidate %>%
+  group_by(roundedDiff=round_any(difshare, 0.005)) %>%
+  dplyr::summarise(prop_reelect=mean(myoutcomenext, na.rm=T)) %>%
+  ggplot(aes(x=roundedDiff, y=prop_reelect)) + 
+  geom_point(size=2.5) + 
+  xlim(-0.25,0.25) +
+  labs(x="Margin of Victory, Election t", 
+       y="Probability of Victory, Election t+1", 
+       title="Figure 2a, binwidth=0.005")
+```
+
+### Write the regression equation that you will estimate.
+
+$$ prob\_wins_i = \beta_0 + \beta_1 \cdot won\_last_i + u_i $$
+
+We now want to estimate the ATE of incumbency on vote share in the next election. Construct a column
+with four estimates and a bandwidth of 0.25. Column 1 has local linear regression, and Columns 2-4 have
+2nd-4th order polynomial controls in the forcing variable. Make sure to estimate separate polynomials on
+either side of the cutoff.
+
+#### Model 2
+$$ prob\_wins_i = \beta_0 + \beta_1 \cdot won\_last_i + \beta_2 \cdot victory\_margin_i + u_i $$
+
+#### Model 3
+$$ prob\_wins_i = \beta_0 + \beta_1 \cdot won\_last_i + \beta_2 \cdot victory\_margin_i + \beta_3 \cdot victory\_margin_i^2 + u_i $$
+
+#### Model 4
+$$ prob\_wins_i = \beta_0 + \beta_1 \cdot won\_last_i + \beta_2 \cdot victory\_margin_i + \beta_3 \cdot victory\_margin_i^2 + \beta_4 \cdot won\_last_i \cdot victory\_margin_i^2 + u_i $$
+
+```{r, results="asis", warning=F}
+candidate.rd <- candidate %>%
+  filter(abs(difshare) <= 0.25)
+
+model1 <- lm(myoutcomenext~myoutcome, candidate.rd)
+model2 <- lm(myoutcomenext~myoutcome+difshare, candidate.rd)
+model3 <- lm(myoutcomenext~myoutcome+difshare+I(difshare^2), candidate.rd)
+model4 <- lm(myoutcomenext~myoutcome+difshare+I(difshare^2)+I(difshare^2)*myoutcome, candidate.rd)
+
+#graph of model1
+candidate.rd %>%
+  group_by(roundedDiff=round_any(difshare,0.005)) %>%
+  dplyr::summarise(prop_reelect=mean(myoutcomenext,na.rm=T)) %>%
+  ggplot(aes(x=roundedDiff, y=prop_reelect)) + 
+  geom_point(size=2) + 
+  xlim(-0.25,0.25) + 
+  ylim(0,1) +
+  stat_function(color="red", size=1, fun=function(x){ifelse(x<=0, coef(model1)[1], NA)}) +
+  stat_function(color="red", size=1, fun=function(x){ifelse(x>=0, coef(model1)[1] + coef(model1)[2], NA)}) +
+  labs(x="Margin of Victory, Election t", 
+       y="Probability of Victory, Election t+1", 
+       title="Model 1")
+  
+#graph of model2
+candidate.rd %>%
+  group_by(roundedDiff=round_any(difshare, 0.005)) %>%
+  dplyr::summarise(prop_reelect=mean(myoutcomenext, na.rm=T)) %>%
+  ggplot(aes(x=roundedDiff, y=prop_reelect)) + 
+  geom_point(size=2) + 
+  xlim(-0.25,0.25) +
+  stat_function(color="red", size=1, fun=function(x){ifelse(x<=0, coef(model2)[1] + (coef(model2)[3] * x), NA)}) +
+  stat_function(color="red", size=1, fun=function(x){ifelse(x>=0, coef(model2)[1] + (coef(model2)[3] * x) + coef(model2)[2], NA)}) + 
+  ylim(0,1) +
+  labs(x="Margin of Victory, Election t", 
+       y="Probability of Victory, Election t+1", 
+       title="Model 2")
+
+#graph of model3
+candidate.rd %>%
+  group_by(roundedDiff=round_any(difshare, 0.005)) %>%
+  dplyr::summarise(prop_reelect=mean(myoutcomenext, na.rm=T)) %>%
+  ggplot(aes(x=roundedDiff, y=prop_reelect)) + 
+  geom_point(size=2) + 
+  xlim(-0.25,0.25) +
+  stat_function(color="red", size=1, fun=function(x){ifelse(x<=0, coef(model3)[1] + (coef(model3)[3] * x) + (coef(model3)[4] * (x^2)), NA)}) +
+  stat_function(color="red", size=1, fun=function(x){ifelse(x>=0, coef(model3)[1] + (coef(model3)[3] * x) + (coef(model3)[4] * (x^2)) + coef(model3)[2], NA)}) + 
+  ylim(0,1) +
+  labs(x="Margin of Victory, Election t", 
+       y="Probability of Victory, Election t+1", 
+       title="Model 3")
+
+# graph of model4
+candidate.rd %>%
+  group_by(roundedDiff=round_any(difshare, 0.005)) %>%
+  dplyr::summarise(prop_reelect=mean(myoutcomenext, na.rm=T)) %>%
+  ggplot(aes(x=roundedDiff, y=prop_reelect)) + 
+  geom_point(size=2) + 
+  xlim(-0.25,0.25) +
+  stat_function(color="red", size=1, fun=function(x){ifelse(x<=0, coef(model4)[1] + (coef(model4)[3] * x) + (coef(model4)[4] * x^2), NA)}) +
+  stat_function(color="red", size=1, fun=function(x){ifelse(x>=0, coef(model4)[1] + coef(model4)[2] + (coef(model4)[3] * x) + ((coef(model4)[4] + coef(model4)[5]) * x^2), NA)}) + ylim(0,1) +
+  labs(x="Margin of Victory, Election t", 
+       y="Probability of Victory, Election t+1", 
+       title="Model 4")
+
+stargazer(list(model1,model2,model3,model4), type="html", dep.var.labels = "Probability of Victory, Election t+1", covariate.labels = c("Incumbent","Margin of Victory","Margin of Victory Sq.","Incumbent * Margin of Victory Sq."))
+```
+
+<br>

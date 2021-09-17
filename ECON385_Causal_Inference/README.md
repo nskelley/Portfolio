@@ -2,23 +2,25 @@
 
 This folder contains Rmarkdown documents used to generate reports replicating the results of published economic research using the publicly available data sets. 
 
-## [Regression Discontinuity](/01_Regression_Discontinuity.rmd)
+## [Regression Discontinuity](/ECON385_Causal_Inference/01_Regression_Discontinuity.rmd)
 
-Using Lee (2008).
+In this assignment, I used the data from Lee (2008) to replicate some of the tables and figures used in the paper. Lee (2008) exploits the discontinuity around the threshold of victory for candidates in an election to evaluate the effect of incumbency on election outcomes.
 
 If you'd prefer to view the output of the Rmarkdown file as a webpage, [click here](https://www.nicholasskelley.com/rmd/causal-replications/Skelley_ECON385_RDD.html).
 
-## [Differences in Differences](/02_DiffInDiff.rmd)
+## [Differences in Differences](/ECON385_Causal_Inference/02_DiffInDiff.rmd)
 
-Using Elissa & Liebman (1996).
+Eissa & Liebman (1996) use a differences-in-differences design to study the effect of the Earned Income Tax Credit on labor supply for single mothers and single non-mothers. In this assignment, I replicate tables and figures from Eissa & Liebman (1996), including heterogeneity analysis and falsification tests.
 
-* [Differences-in-Differences](https://www.nicholasskelley.com/rmd/causal-replications/Skelley_ECON385_DiffInDiff.html)
+[Click here to view the HTML output as a webpage instead](https://www.nicholasskelley.com/rmd/causal-replications/Skelley_ECON385_DiffInDiff.html)
 
-## [Randomized Controlled Trial](/03_RCT.rmd)
+## [Randomized Controlled Trial](/ECON385_Causal_Inference/03_RCT.rmd)
 
-Using Martinez et al. (2018).
+This assignment uses data from Martinez et al. (2018), who studied the effects of micro-entrepreneurship programs by randomly assigning participants to receive training and studying the effects for almost four years. Using the data from Martinez et al. (2018), I replicate the results reported by Martinez et al. (2019), including summary statistics, t-tests, and regression models.
 
-* [Randomized Controlled Trial](https://www.nicholasskelley.com/rmd/causal-replications/Skelley_ECON385_RCT.html)
+[Click here to view the HTML output as a webpage instead](https://www.nicholasskelley.com/rmd/causal-replications/Skelley_ECON385_RCT.html)
+
+<br>
 
 **References**
 

@@ -18,11 +18,11 @@ This folder contains Rmarkdown documents used to generate reports replicating th
 
 If you'd prefer to view the output HTML files as webpages, you can use one of the following links to pages on my website:
 
-* [Regression Discontinuity](https://www.nicholasskelley.com/rmd/causal-replications/Skelley_ECON385_RDD.html){:target="_blank"}
+* [Regression Discontinuity](https://www.nicholasskelley.com/rmd/causal-replications/Skelley_ECON385_RDD.html)
 
-* [Differences-in-Differences](https://www.nicholasskelley.com/rmd/causal-replications/Skelley_ECON385_DiffInDiff.html){:target="_blank"}
+* [Differences-in-Differences](https://www.nicholasskelley.com/rmd/causal-replications/Skelley_ECON385_DiffInDiff.html)
 
-* [Instrumental Variables](https://www.nicholasskelley.com/rmd/causal-replications/Skelley_ECON385_Instrumental.html){:target="_blank"}
+* [Instrumental Variables](https://www.nicholasskelley.com/rmd/causal-replications/Skelley_ECON385_Instrumental.html)
 
 ## [ECON 320: Econometrics - R Lab](/ECON320_Econometrics_Lab)
 *Emory University, Spring 2020*

@@ -2,13 +2,6 @@
 
 Welcome to my coding portfolio! Here you can explore some of my recent work in R, including projects from Emory coursework and research.
 
-## [Summer Undergraduate Research Experience (SURE)](/SURE_Social_Program_Manipulation)
-*Emory University, Summer 2021*
-
-This folder contains code I wrote during the Summer of 2021 as part of the Summer Undergraduate Research Experience (SURE) program at Emory University. Code includes that used for analysis and for producing tables and graphs. One data source referenced in the code is the [Vulnerability Assessment for Syrian Refugees in Lebanon (VASyR)](http://ialebanon.unhcr.org/vasyr/) from the United Nations High Commissioner for Refguees.
-
-Due to the confidential nature of the data and results, the files contained in this folder are not exhaustive and may have been edited to remove sensitive information. For the same reason, I also do not provide any of the tables and graphics produced by the included code.
-
 ## [ECON 385: Special Topics in Economics - Causal Inference](/ECON385_Causal_Inference)
 *Emory University, Spring 2020*
 

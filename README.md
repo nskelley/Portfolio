@@ -2,6 +2,11 @@
 
 Welcome to my coding portfolio! Here you can explore some of my recent work in R, including projects from Emory coursework and research.
 
+## [ECON 496: Self-Study Python for Statistics](/ECON496_Python)
+*Emory University, Spring 2022*
+
+This folder contains Jupyter Notebook files exploring LASSO, Ridge, and Elastic Net regressions and manual investigations of the algorithms underlying cross validation and k-means clustering.
+
 ## [ECON 385: Special Topics in Economics - Causal Inference](/ECON385_Causal_Inference)
 *Emory University, Spring 2020*
 
